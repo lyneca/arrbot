@@ -4,13 +4,19 @@ import api
 from datetime import datetime
 import re
 
-with open("google.apikey") as keyfile:
-    google_key = keyfile.read()
+try:
+    with open("google.apikey") as keyfile:
+        google_key = keyfile.read()
+except FileNotFoundError:
+    raise FileNotFoundError("Arr, ye need to put yer Google API key in a file named 'google.apikey'.")
 
-with open("slack.apikey") as keyfile:
-    slack_key = keyfile.read()
+try:
+    with open("slack.apikey") as keyfile:
+        slack_key = keyfile.read()
+except FileNotFoundError:
+    raise FileNotFoundError("Arr, ye need to put yer Slack API key in a file named 'slack.apikey'.")
 
-    slack = api.API(slack_key)
+slack = api.API(slack_key)
 
 letters = ['.-', '-...', '-.-.', '-..', '.', '..-.', '--.', '....', '..', '.---', '-.-', '.-..', '--', '-.', '---',
            '.--.', '--.-', '.-.', '...', '-', '..-', '...-', '.--', '-..-', '-.--', '--..']
@@ -78,7 +84,8 @@ def to_morse(message):
 def google_search(message):
     channel = message['channel']
     query = ':'.join(message['text'].split(':')[1:]).strip().lower()
-    r = requests.get("https://www.googleapis.com/customsearch/v1", params={'key': google_key, 'cx': "011750264622141039810:mskvujvr5qm", 'q': query})
+    r = requests.get("https://www.googleapis.com/customsearch/v1",
+                     params={'key': google_key, 'cx': "011750264622141039810:mskvujvr5qm", 'q': query})
     items = r.json()['items']
     results = ["<" + x['link'] + "|" + x['title'] + "> (" + x["displayLink"] + ")" for x in
                items[:(10 if len(items) > 10 else len(items))]]
