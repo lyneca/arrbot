@@ -3,6 +3,7 @@ import websocket
 import api
 from datetime import datetime
 import re
+import random
 
 num_search_results = 4  # number of google results to display
 
@@ -33,76 +34,92 @@ text_to_morse.update(numbers)
 text_to_morse.update(symbols)
 morse_to_text = {text_to_morse[x]: x for x in text_to_morse}
 
-
-def send(channel, message):
-    slack.post_as_bot(
-        channel,
-        message,
-        'Arrbot',
-        'http://i.imgur.com/EuY3ao6.png',
-    )
+help = [
+    "`google: <query>`: performs a Google search on that query and displays the results inline",
+    "`morse: <words>`: translates words into Morse Code",
+    "Just typing morse code will result in auto translation - as long as your message only contains morse-y characters,"
+]
 
 
-def morse(message):
-    string = message['text']
-    channel = message['channel']
-    out = []
-    morse = False
-    for word in string.split():
-        if word in morse_to_text:
-            morse = True
-            out.append(morse_to_text[word])
-        else:
-            out.append(word)
-    print(out)
-    for char in string:
-        if char not in [' ', '.', '-', '/']:
-            morse = False
-    if morse:
-        send(
+class Arrbot:
+    def __init__(self):
+        self.responses = {
+            'arrbot: help': '\n'.join(help)
+        }
+        self.functions = {
+            r'': self.morse,
+            r'morse:': self.to_morse,
+            r'google:': self.google_search,
+            r'[Yy]ou\'?re an? ': lambda s: self.send(s['channel'], 'o' * random.randint(5, 15))
+        }
+
+    def send(self, channel, message):
+        slack.post_as_bot(
             channel,
-            "Translation: `" + ''.join(out).replace('/', ' ') + '`'
+            message,
+            'Arrbot',
+            # 'http://i.imgur.com/EuY3ao6.png',
+            ':reul:',
         )
 
+    def register_func(self, f, reg):
+        self.functions[reg] = f
 
-def to_morse(message):
-    string = message['text']
-    channel = message['channel']
-    out = []
-    content = ':'.join(string.split(':')[1:]).strip().lower()
-    for char in content:
-        if char in text_to_morse:
-            out.append(text_to_morse[char])
-        elif char is ' ':
-            out.append('/')
-        else:
-            out.append(char)
-    send(
-        channel,
-        "Morse: `" + ' '.join(out) + '`'
-    )
+    def register_resp(self, f, reg):
+        self.functions[reg] = f
+
+    def morse(self, message):
+        string = message['text']
+        channel = message['channel']
+        out = []
+        morse = False
+        for word in string.split():
+            if word in morse_to_text:
+                morse = True
+                out.append(morse_to_text[word])
+            else:
+                out.append(word)
+        print(out)
+        for char in string:
+            if char not in [' ', '.', '-', '/']:
+                morse = False
+        if morse:
+            self.send(
+                channel,
+                "Translation: `" + ''.join(out).replace('/', ' ') + '`'
+            )
+
+    def to_morse(self, message):
+        string = message['text']
+        channel = message['channel']
+        out = []
+        content = ':'.join(string.split(':')[1:]).strip().lower()
+        for char in content:
+            if char in text_to_morse:
+                out.append(text_to_morse[char])
+            elif char is ' ':
+                out.append('/')
+            else:
+                out.append(char)
+        self.send(
+            channel,
+            "Morse: `" + ' '.join(out) + '`'
+        )
+
+    def google_search(self, message):
+        channel = message['channel']
+        query = ':'.join(message['text'].split(':')[1:]).strip().lower()
+        r = requests.get("https://www.googleapis.com/customsearch/v1",
+                         params={'key': google_key, 'cx': "011750264622141039810:mskvujvr5qm", 'q': query})
+        items = r.json()['items']
+        results = [
+            "<" + x['link'] + "|" + x['title'] + "> (" + x["displayLink"] + "):\n>" + '\n>'.join(
+                x['snippet'].split('\n'))
+            for x in items[:(num_search_results if len(items) > num_search_results else len(items))]]
+        self.send(channel, 'Google results for %s:\n%s' % (query, '\n'.join(results)))
 
 
-def google_search(message):
-    channel = message['channel']
-    query = ':'.join(message['text'].split(':')[1:]).strip().lower()
-    r = requests.get("https://www.googleapis.com/customsearch/v1",
-                     params={'key': google_key, 'cx': "011750264622141039810:mskvujvr5qm", 'q': query})
-    items = r.json()['items']
-    results = [
-        "<" + x['link'] + "|" + x['title'] + "> (" + x["displayLink"] + "):\n>" + '\n>'.join(x['snippet'].split('\n'))
-        for x in items[:(num_search_results if len(items) > num_search_results else len(items))]]
-    send(channel, 'Google results for %s:\n%s' % (query, '\n'.join(results)))
-
-
-responses = {
-
-}
-functions = {
-    r'': morse,
-    r'morse:': to_morse,
-    r'google:': google_search
-}
+arrbot = Arrbot()
 
 initial_metadata = requests.get('https://slack.com/api/rtm.start', params={'token': slack_key}).json()
 wss_url = initial_metadata['url']
@@ -120,11 +137,11 @@ while True:
         print(n)
         if 'text' not in n:
             continue
-        for function in functions:
+        for function in arrbot.functions:
             if re.match(function, n['text']):
-                functions[function](n)
+                arrbot.functions[function](n)
                 continue
-        for response in responses:
+        for response in arrbot.responses:
             if re.match(response, n['text']):
-                send(n['channel'], responses[response])
+                arrbot.send(n['channel'], arrbot.responses[response])
                 continue
