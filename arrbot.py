@@ -4,6 +4,8 @@ import api
 from datetime import datetime
 import re
 
+num_search_results = 4  # number of google results to display
+
 try:
     with open("google.apikey") as keyfile:
         google_key = keyfile.read()
@@ -87,12 +89,15 @@ def google_search(message):
     r = requests.get("https://www.googleapis.com/customsearch/v1",
                      params={'key': google_key, 'cx': "011750264622141039810:mskvujvr5qm", 'q': query})
     items = r.json()['items']
-    results = ["<" + x['link'] + "|" + x['title'] + "> (" + x["displayLink"] + ")" for x in
-               items[:(10 if len(items) > 10 else len(items))]]
+    results = [
+        "<" + x['link'] + "|" + x['title'] + "> (" + x["displayLink"] + "):\n>" + '\n>'.join(x['snippet'].split('\n'))
+        for x in items[:(num_search_results if len(items) > num_search_results else len(items))]]
     send(channel, 'Google results for %s:\n%s' % (query, '\n'.join(results)))
 
 
-responses = {}
+responses = {
+
+}
 functions = {
     r'': morse,
     r'morse:': to_morse,
